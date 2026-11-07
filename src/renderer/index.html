@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self'">
+  <title>Missy Central</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="theme-gallery.css">
+</head>
+<body class="theme-gallery" data-status="green" data-state="idle">
+  <div id="frame" aria-hidden="true"></div>
+  <div id="gallery" aria-hidden="true">
+    <div class="marble"></div><div class="arch left"></div><div class="arch right"></div>
+    <div class="ceiling"></div><div class="beam"></div><div class="floor"></div>
+    <div class="pedestal"><div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div></div>
+  </div>
+  <canvas id="brain" aria-label="Missy Central"></canvas>
+  <div id="vignette" aria-hidden="true"></div>
+
+  <header id="topbar">
+    <div class="wordmark">
+      <span class="mark">M</span>
+      <div>
+        <div class="name">MISSY <b>CENTRAL</b></div>
+        <div class="script">Missy Central</div>
+        <div class="sub">Executive Operations HQ</div>
+      </div>
+    </div>
+    <button id="statusPill" class="status-pill" title="What this color means">
+      <span class="dot"></span><span id="statusText">Monitored systems normal</span>
+    </button>
+    <div class="top-right">
+      <span id="aiBadge" class="chip" title="Local AI">AI —</span>
+      <span id="micBadge" class="chip" title="Voice transcription">MIC —</span>
+      <div id="clock" class="clock"></div>
+    </div>
+  </header>
+
+  <aside id="leftCol">
+    <section class="holo" id="teamCard">
+      <h3><span class="glyph">♛</span> The team</h3>
+      <div id="teamList" class="team"></div>
+    </section>
+    <section class="holo" id="attentionCard">
+      <h3><span class="glyph">◆</span> Needs you</h3>
+      <div id="attentionList" class="stack"></div>
+    </section>
+    <section class="holo" id="todayCard">
+      <h3><span class="glyph">◷</span> <span id="todayLabel">Today</span></h3>
+      <div id="todayList" class="stack"></div>
+    </section>
+    <section class="holo slim" id="briefCard">
+      <button id="briefBtn" class="ghost-btn">Run morning scan</button>
+      <div id="lastScan" class="muted tiny"></div>
+    </section>
+  </aside>
+
+  <aside id="rightCol" class="holo tall">
+    <nav id="tabs" role="tablist">
+      <button data-tab="tasks" class="on">Tasks</button>
+      <button data-tab="calendar">Calendar</button>
+      <button data-tab="projects">Projects</button>
+      <button data-tab="alerts">Alerts <span id="alertCount" class="count" hidden></span></button>
+      <button data-tab="memory">Memory</button>
+      <button data-tab="log">Log</button>
+      <button data-tab="settings" title="Settings">⚙</button>
+    </nav>
+    <div id="panel" class="panel-body"></div>
+  </aside>
+
+  <div id="stateLabel" class="state-label">Online</div>
+
+  <section id="transcript" aria-live="polite"></section>
+
+  <footer id="dock">
+    <button id="micBtn" class="mic" title="Hold Space or click to talk">
+      <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.93V21h2v-2.07A7 7 0 0 0 19 12h-2Z"/></svg>
+      <span class="ring"></span>
+    </button>
+    <form id="askForm" autocomplete="off">
+      <input id="askInput" placeholder='Talk to Missy — try "catch me up" or "what needs my attention?"' aria-label="Message Missy">
+      <button type="submit" class="send">Send</button>
+    </form>
+    <button id="muteBtn" class="ghost-btn small" title="Mute Missy's voice">🔊</button>
+  </footer>
+
+  <div id="overlay" hidden></div>
+  <div id="toasts"></div>
+
+  <script src="presence/brain.js"></script>
+  <script src="presence/neon-brain.js"></script>
+  <script src="lib/recorder.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

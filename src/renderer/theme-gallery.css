@@ -1,0 +1,137 @@
+/* ==========================================================================
+   Luxury Gallery theme — Missy's private command desk inside the Style Gallery.
+   Dark marble, gold trim, glass display cases, purple neon, glass brain on a
+   lit pedestal. Remove the "theme-gallery" class to return to the Neon HQ look.
+   ========================================================================== */
+
+#gallery, .wordmark .script { display: none; }
+
+body.theme-gallery {
+  --gold: #e6c27a;
+  --gold-hi: #fff0c8;
+  --gold-deep: #a9792f;
+  --plum: #2a0f3d;
+  --violet: #9a4dff;
+  --pink: #ff3fa4;
+  --line: rgba(230, 194, 122, 0.22);
+  --line-hi: rgba(230, 194, 122, 0.55);
+  --serif: "Didot", "Bodoni 72", "Playfair Display", "Cormorant Garamond", Georgia, serif;
+  --script: "Snell Roundhand", "Great Vibes", "Apple Chancery", cursive;
+  background: #050308;
+}
+
+/* ---------- the room ---------- */
+.theme-gallery #gallery { display: block; position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.theme-gallery #gallery .marble {
+  position: absolute; inset: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='900' height='900'><filter id='m'><feTurbulence type='fractalNoise' baseFrequency='0.004 0.013' numOctaves='5' seed='8'/><feColorMatrix values='0 0 0 0 0.92  0 0 0 0 0.78  0 0 0 0 0.55  1 0 0 0 0'/><feComponentTransfer><feFuncA type='table' tableValues='0 0 0 0 0.55 0 0 0 0 0'/></feComponentTransfer></filter><rect width='100%' height='100%' filter='url(%23m)'/></svg>");
+  background-size: 900px 900px; opacity: .16; mix-blend-mode: screen;
+}
+.theme-gallery #gallery .ceiling { position: absolute; left: 50%; top: -18vh; width: 70vw; height: 48vh; transform: translateX(-50%); border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(140, 80, 255, .38), rgba(90, 40, 200, .16) 55%, transparent 75%); filter: blur(10px); }
+.theme-gallery #gallery .beam { position: absolute; left: calc(50vw - 55px); top: 0; height: 78vh; width: 260px; transform: translateX(-50%);
+  background: linear-gradient(180deg, rgba(150, 90, 255, .45), rgba(255, 63, 164, .12) 60%, transparent);
+  filter: blur(26px); opacity: .55; }
+.theme-gallery #gallery .arch { position: absolute; top: -40vh; width: 70vw; height: 120vh; border-radius: 50%;
+  border: 2px solid rgba(230, 194, 122, .5); box-shadow: 0 0 40px rgba(230, 194, 122, .35), inset 0 0 40px rgba(230, 194, 122, .18); opacity: .55; }
+.theme-gallery #gallery .arch.left { left: -52vw; }
+.theme-gallery #gallery .arch.right { right: -52vw; }
+.theme-gallery #gallery .floor { position: absolute; left: 0; right: 0; bottom: 0; height: 34vh;
+  background:
+    radial-gradient(60% 70% at 50% 0%, rgba(230, 194, 122, .10), transparent 70%),
+    linear-gradient(180deg, transparent, rgba(0, 0, 0, .55)),
+    repeating-linear-gradient(90deg, transparent 0 140px, rgba(230, 194, 122, .05) 140px 141px);
+  border-top: 1px solid rgba(230, 194, 122, .12); }
+.theme-gallery #gallery .pedestal { position: absolute; left: calc(50vw - 55px); top: calc(50vh - 45px + (100vh - 210px) * 0.30); transform: translate(-50%, 0); width: 520px; height: 120px; }
+.theme-gallery #gallery .ring { position: absolute; left: 50%; top: 50%; border-radius: 50%; transform: translate(-50%, -50%) rotateX(74deg); }
+.theme-gallery #gallery .r1 { width: 460px; height: 460px; border: 2px solid var(--gold); box-shadow: 0 0 22px var(--gold), 0 0 60px rgba(230, 194, 122, .5), inset 0 0 40px rgba(230, 194, 122, .4); }
+.theme-gallery #gallery .r2 { width: 380px; height: 380px; border: 1px solid rgba(255, 63, 164, .7); box-shadow: 0 0 18px rgba(255, 63, 164, .6); }
+.theme-gallery #gallery .r3 { width: 300px; height: 300px; background: radial-gradient(closest-side, rgba(255, 240, 200, .35), rgba(154, 77, 255, .18) 60%, transparent); }
+.theme-gallery #vignette { background: radial-gradient(ellipse at 45% 45%, transparent 40%, rgba(0, 0, 0, .78) 100%); }
+.theme-gallery #brain { z-index: 2; }
+
+/* ---------- wordmark & top bar ---------- */
+.theme-gallery .mark { display: none; }
+.theme-gallery .wordmark .name { display: none; }
+.theme-gallery .wordmark .script { display: block; font-family: var(--script); font-size: 30px; line-height: 1; color: var(--gold-hi);
+  background: linear-gradient(180deg, #fff6dc, var(--gold) 55%, var(--gold-deep)); -webkit-background-clip: text; color: transparent;
+  filter: drop-shadow(0 0 10px rgba(230, 194, 122, .35)); padding: 4px 6px 0 0; }
+.theme-gallery .wordmark .sub { font-family: var(--serif); letter-spacing: .42em; font-size: 9px; color: rgba(255, 240, 200, .6); margin-top: 3px; }
+.theme-gallery .status-pill, .theme-gallery .chip { background: rgba(10, 6, 14, .7); border-color: rgba(230, 194, 122, .35); }
+.theme-gallery .clock { font-family: var(--serif); letter-spacing: .12em; color: rgba(255, 240, 200, .7); }
+
+/* ---------- glass display cases ---------- */
+.theme-gallery .holo {
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, .09) 0%, rgba(255, 255, 255, .02) 18%, transparent 30%),
+    linear-gradient(180deg, rgba(30, 16, 40, .55), rgba(8, 5, 12, .78));
+  border: 1px solid rgba(230, 194, 122, .45);
+  border-radius: 6px;
+  box-shadow: 0 30px 60px -20px rgba(0, 0, 0, .9), 0 0 0 1px rgba(0, 0, 0, .6), inset 0 0 30px -10px rgba(154, 77, 255, .35), inset 0 1px 0 rgba(255, 240, 200, .25);
+  backdrop-filter: blur(14px) saturate(130%);
+}
+.theme-gallery .holo::before { /* gold cap on top of the case */
+  inset: -1px -1px auto -1px; height: 4px; padding: 0; border-radius: 6px 6px 0 0;
+  background: linear-gradient(90deg, var(--gold-deep), var(--gold-hi) 30%, var(--gold) 60%, var(--gold-deep));
+  -webkit-mask: none; mask: none; box-shadow: 0 0 14px rgba(230, 194, 122, .55);
+}
+.theme-gallery .holo::after { /* lit base under the case */
+  content: ""; position: absolute; left: 6%; right: 6%; bottom: -7px; height: 6px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(closest-side, rgba(255, 220, 150, .9), rgba(230, 194, 122, .3) 60%, transparent);
+  filter: blur(2px);
+}
+.theme-gallery .holo h3 { font-family: var(--serif); font-size: 12px; letter-spacing: .3em; color: var(--gold); font-weight: 400; }
+.theme-gallery .holo h3 .glyph { color: var(--pink); text-shadow: 0 0 8px var(--pink); }
+.theme-gallery .item { background: rgba(255, 255, 255, .025); border-color: rgba(230, 194, 122, .08); border-radius: 6px; }
+.theme-gallery .item:hover { background: rgba(154, 77, 255, .08); border-color: rgba(230, 194, 122, .3); }
+.theme-gallery .section-title { font-family: var(--serif); color: var(--gold); letter-spacing: .28em; }
+.theme-gallery .section-title::after { background: linear-gradient(90deg, rgba(230, 194, 122, .4), transparent); }
+
+#tabs { scrollbar-width: none; }
+.theme-gallery #tabs { border-bottom-color: rgba(230, 194, 122, .25); }
+.theme-gallery #tabs button { font-family: var(--serif); text-transform: uppercase; letter-spacing: .08em; font-size: 10px; padding: 12px 5px 11px; color: rgba(255, 240, 200, .55); }
+.theme-gallery #tabs button.on { color: var(--gold-hi); border-bottom-color: var(--gold); text-shadow: 0 0 10px rgba(230, 194, 122, .6); }
+
+/* ---------- buttons: gold pills like the gallery ---------- */
+.theme-gallery .ghost-btn { border-radius: 999px; border-color: rgba(230, 194, 122, .5); background: rgba(10, 6, 14, .55); font-family: var(--serif); letter-spacing: .1em; text-transform: uppercase; font-size: 11px; padding: 9px 16px; }
+.theme-gallery .ghost-btn:hover { border-color: var(--gold-hi); box-shadow: 0 0 20px -4px var(--gold); }
+.theme-gallery .ghost-btn.gold, .theme-gallery #briefBtn {
+  color: #1b1206; border: 1px solid var(--gold-hi);
+  background: linear-gradient(180deg, #fff0c8, var(--gold) 45%, var(--gold-deep));
+  box-shadow: 0 0 22px -6px var(--gold), inset 0 1px 0 rgba(255, 255, 255, .6); }
+.theme-gallery .ghost-btn.pink { color: #ffd2ea; border-color: rgba(255, 63, 164, .65); background: linear-gradient(180deg, rgba(120, 20, 80, .55), rgba(40, 6, 30, .65)); }
+.theme-gallery .ghost-btn.small { padding: 6px 12px; font-size: 10px; }
+.theme-gallery .field { background: rgba(5, 3, 8, .6); border-color: rgba(230, 194, 122, .22); border-radius: 6px; }
+.theme-gallery .field:focus { border-color: var(--gold); box-shadow: 0 0 14px -6px var(--gold); }
+.theme-gallery .filters button { font-family: var(--serif); letter-spacing: .08em; border-color: rgba(230, 194, 122, .2); }
+.theme-gallery .filters button.on { border-color: var(--gold); color: var(--gold-hi); background: rgba(230, 194, 122, .1); }
+.theme-gallery .switch.on { background: linear-gradient(90deg, var(--pink), #c2186b); }
+.theme-gallery .check.on { background: var(--gold); border-color: var(--gold); }
+.theme-gallery .proj { border-radius: 6px; border-color: rgba(230, 194, 122, .2); background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(0,0,0,.25)); }
+.theme-gallery .proj .pn { font-family: var(--serif); letter-spacing: .04em; font-weight: 600; }
+
+/* ---------- center: state label, transcript, dock ---------- */
+.theme-gallery .state-label { font-family: var(--serif); color: var(--gold); text-shadow: 0 0 14px rgba(230, 194, 122, .7); letter-spacing: .55em; z-index: 4; }
+.theme-gallery .bubble { border-radius: 10px; }
+.theme-gallery .bubble.missy { background: linear-gradient(180deg, rgba(30, 16, 40, .82), rgba(10, 6, 14, .88)); border-color: rgba(230, 194, 122, .45); }
+.theme-gallery .bubble.missy::before { font-family: var(--serif); color: var(--gold); letter-spacing: .4em; }
+.theme-gallery .bubble.you { background: rgba(120, 20, 80, .35); border-color: rgba(255, 63, 164, .45); }
+.theme-gallery #dock { border-radius: 999px; border: 1px solid rgba(230, 194, 122, .55); background: linear-gradient(180deg, rgba(30, 16, 40, .8), rgba(8, 5, 12, .9));
+  box-shadow: 0 0 40px -12px var(--gold), 0 20px 50px -20px #000, inset 0 1px 0 rgba(255, 240, 200, .2); }
+.theme-gallery .mic { box-shadow: 0 0 0 2px var(--gold), 0 0 26px -2px var(--pink); }
+.theme-gallery .send { border-radius: 999px; font-family: var(--serif); letter-spacing: .14em; text-transform: uppercase; font-size: 12px; padding: 0 22px;
+  background: linear-gradient(180deg, #fff0c8, var(--gold) 45%, var(--gold-deep)); box-shadow: 0 0 18px -6px var(--gold), inset 0 1px 0 rgba(255,255,255,.6); }
+.theme-gallery #askInput::placeholder { color: rgba(255, 240, 200, .35); }
+
+/* ---------- overlays ---------- */
+.theme-gallery .sheet h2 { font-family: var(--serif); }
+.theme-gallery .brief-sec { border-color: rgba(230, 194, 122, .25); border-radius: 6px; }
+.theme-gallery .brief-sec h4 { font-family: var(--serif); color: var(--gold); }
+
+/* ---------- brain labels as gallery plaques ---------- */
+.theme-gallery .brain-label { font-family: var(--serif); font-weight: 600; letter-spacing: .2em; font-size: 10.5px; border-radius: 4px; background: rgba(8, 4, 12, .55);
+  border-color: color-mix(in srgb, var(--lc) 55%, rgba(230, 194, 122, .6)); }
+
+/* red alerts still take over the whole room */
+body.theme-gallery[data-status="red"] #gallery .beam { background: linear-gradient(180deg, rgba(255, 40, 60, .55), transparent); }
+body.theme-gallery[data-status="red"] #gallery .r1 { border-color: var(--red); box-shadow: 0 0 30px var(--red); }
