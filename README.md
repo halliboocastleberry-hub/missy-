@@ -1,20 +1,20 @@
-# Missy Central — v0.1 (Phase One prototype)
+# Missy Central — v0.3
 
 Private AI executive assistant and operations HQ for Halli S. Castleberry.
 Runs entirely on your Mac. Costs nothing. Nothing leaves the computer.
 
 ---
 
-## 1. Install (about 5 minutes)
+## 1. Start Missy (Chrome edition)
 
-1. **Install Node.js** (free): https://nodejs.org → download the **LTS** version → run the installer.
-2. **Unzip** `missy-central.zip` somewhere you'll keep it, e.g. `~/Documents/missy-central`.
-3. **Double-click `Start Missy.command`.**
-   - First time only, macOS may say it's from an unidentified developer: right-click the file → **Open** → **Open**.
-   - The first launch downloads Electron (the app shell, ~100 MB) once. After that it opens in seconds.
-   - Prefer Terminal? `cd ~/Documents/missy-central && npm install && npm start`
+1. Node.js must be installed (free, nodejs.org → LTS). You already have it.
+2. Unzip Missy, open the folder, and double-click **`Start Missy.command`**. (First time: right-click → Open → Open.)
+3. Chrome opens at **http://localhost:4747**. Keep the Terminal window open while you use her.
+4. **Give her a brain (free, 2 minutes):** ⚙ Settings → *Missy's AI brain* → get a key at aistudio.google.com/apikey → paste → Save. The **AI** chip at the top turns green.
+5. Click the pink mic (or hold Space) and talk. Chrome asks for the microphone once — click Allow.
 
-Missy opens, runs her first morning scan, and speaks the briefing.
+Your data lives in `~/Library/Application Support/missy-central/data`, so new versions of Missy keep your tasks, calendar and keys.
+See **HANDOFF.md** for the full development status.
 
 ## 2. Tell me about your Mac (the only hardware info needed)
 

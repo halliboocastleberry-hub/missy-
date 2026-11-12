@@ -56,7 +56,9 @@
 
   // ---------------------------------------------------------------- speech out
   let talker = null; // which team member is speaking (for her portrait glow)
-  async function say(text, speaker = 'assistant') {
+  let listenAfterSpeech = false;
+  async function say(text, speaker = 'assistant', { followUp = false } = {}) {
+    listenAfterSpeech = followUp && Boolean(snap && snap.settings.handsFree !== false) && /\?\s*$/.test(String(text || ''));
     if (!text || !snap || !snap.settings.spokenResponses) return;
     talker = speaker; renderTeamGlow();
     if (api.nativeSpeech) { api.speak(text, speaker); return; }
@@ -70,7 +72,10 @@
       const v = pickBrowserVoice(m.voice, speaker);
       if (v) u.voice = v;
       u.onstart = () => { speaking = true; syncState(); };
-      u.onend = u.onerror = () => { speaking = false; syncState(); renderTeamGlow(); };
+      u.onend = u.onerror = () => {
+        speaking = false; syncState(); renderTeamGlow();
+        if (listenAfterSpeech && canBrowserListen()) { listenAfterSpeech = false; setTimeout(() => { if (!listening && !busy) startListening(); }, 350); }
+      };
       speechSynthesis.speak(u);
     } catch { /* no speech available */ }
   }
@@ -121,7 +126,7 @@
     try {
       const r = await api.ask(text);
       bubble('missy', r.text, false, r.speaker);
-      if (r.speak !== false) say(r.text, r.speaker);
+      if (r.speak !== false) say(r.text, r.speaker, { followUp: true });
       if (r.panel === 'briefing') { await refresh(); showBriefing(snap.lastScan); }
       else if (r.panel && r.panel !== 'help') setTab(r.panel === 'settings' ? 'settings' : r.panel);
       if (r.focusProject) { focusProject = r.focusProject; setTab('projects'); }
@@ -397,7 +402,7 @@
           <div class="ps">${open.length} open · ${ts.length - open.length} done${appr ? ` · <span style="color:var(--yellow)">${appr} approval</span>` : ''}</div>
           <div class="ps">${esc((p.focus || []).slice(0, 2).join(' · '))}</div></div>`;
       }).join('')}</div>
-      <div class="muted tiny" style="margin-top:12px">Click a business to see its tasks. Live stores, payments and sites aren't connected yet — counts here come from Missy's own records.</div>`;
+      <div class="muted tiny" style="margin-top:12px">Click a business to see its tasks. Live checks (website, GitHub, Stripe) are set up in Settings → Business connections — ask "check SiteStyles" to run them.</div>`;
   }
 
   function panelAlerts() {
@@ -470,9 +475,34 @@
       <div class="section-title">This Mac</div>
       <div id="hwBox" class="kv"><div>Checking…</div><div></div></div>
 
-      <div class="section-title">Local AI (free, optional)</div>
+      <div class="section-title">Missy's AI brain</div>
       <div id="aiBox" class="muted tiny">Checking…</div>
-      <div class="toggle"><span>Model</span><input class="field" style="width:190px" data-setting="ollamaModel" value="${esc(s.ollamaModel)}" placeholder="auto"></div>
+      <div class="setup-step tiny">
+        <b>Free Google Gemini key (recommended):</b> go to <a href="#" data-url="https://aistudio.google.com/apikey">aistudio.google.com/apikey</a>, sign in with Google, click <i>Create API key</i>, copy it, paste it here and press Save. No card needed.
+        <div class="row" style="margin-top:8px"><input class="field" style="flex:1" type="password" id="key-geminiKey" placeholder="${snap.secrets.geminiKey ? esc(snap.secrets.geminiKey) : 'Paste Gemini key'}" autocomplete="off"><button class="ghost-btn small gold" data-savekey="geminiKey">Save</button>${snap.secrets.geminiKey ? '<button class="ghost-btn small" data-clearkey="geminiKey">Remove</button>' : ''}</div>
+        <div class="muted" style="margin-top:6px">Google's free tier may use what you say to improve its products, so don't tell Missy passwords or card numbers.</div>
+      </div>
+      <details class="setup-step tiny"><summary>Other free brains (backup)</summary>
+        <div style="margin-top:8px"><b>Groq</b> (free, very fast): key from <a href="#" data-url="https://console.groq.com/keys">console.groq.com/keys</a>
+          <div class="row" style="margin-top:6px"><input class="field" style="flex:1" type="password" id="key-groqKey" placeholder="${snap.secrets.groqKey ? esc(snap.secrets.groqKey) : 'Paste Groq key'}" autocomplete="off"><button class="ghost-btn small gold" data-savekey="groqKey">Save</button>${snap.secrets.groqKey ? '<button class="ghost-btn small" data-clearkey="groqKey">Remove</button>' : ''}</div></div>
+        <div style="margin-top:8px"><b>Ollama</b> (free, fully private, runs on your Mac — needs 16 GB memory to be good): install from <a href="#" data-url="https://ollama.com/download">ollama.com</a>, then in Terminal <code>ollama pull llama3.2:3b</code>.</div>
+        <div class="toggle"><span>Which brain</span><select class="field" style="width:190px" data-ai="provider">${[['auto', 'Automatic (best available)'], ['gemini', 'Gemini only'], ['groq', 'Groq only'], ['ollama', 'Ollama only'], ['off', 'Off (commands only)']].map(([v, l]) => `<option value="${v}" ${((s.ai && s.ai.provider) || 'auto') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      </details>
+      ${sw('handsFree', 'Hands-free: listen again after Missy asks a question')}
+
+      <div class="section-title">Business connections</div>
+      <div class="muted tiny" style="margin-bottom:8px">Missy only reports what she can actually check. Each check runs live when you ask.</div>
+      ${snap.projects.filter(p => p.key !== 'personal' && p.status !== 'archived').map(p => { const c = p.connections || {}; const on = Object.keys(c).length; return `
+        <details class="setup-step tiny" ${p.key === 'sitestyles' ? 'open' : ''}><summary><b>${esc(p.name)}</b> ${on ? `<span class="tag real">connected</span>` : '<span class="tag unchecked">not connected</span>'}</summary>
+          <div class="toggle"><span>Website</span><input class="field" style="width:210px" data-conn="${p.id}" data-key="website" value="${esc(c.website || '')}" placeholder="https://…"></div>
+          <div class="toggle"><span>GitHub repo</span><input class="field" style="width:210px" data-conn="${p.id}" data-key="github" value="${esc(c.github || '')}" placeholder="owner/repo"></div>
+          <div class="toggle"><span>Stripe sales</span><button class="switch ${c.stripe ? 'on' : ''}" data-connswitch="${p.id}"></button></div>
+          ${p.lastCheck ? `<div class="muted" style="margin:6px 0">Last check ${fmtDate(p.lastCheck.at)} ${fmtTime(p.lastCheck.at)}: ${esc(p.lastCheck.results.map(r => r.summary).join(' '))}</div>` : ''}
+          <button class="ghost-btn small gold" data-checkproj="${p.id}">Check now</button>
+        </details>`; }).join('')}
+      <div class="setup-step tiny"><b>Stripe (read-only):</b> in Stripe go to Developers → API keys → <i>Create restricted key</i>, name it "Missy", set <b>Charges</b> and <b>Balance</b> to <b>Read</b> (everything else None), create it and paste the key that starts with <code>rk_</code>. Missy refuses full secret keys.
+        <div class="row" style="margin-top:8px"><input class="field" style="flex:1" type="password" id="key-stripeKey" placeholder="${snap.secrets.stripeKey ? esc(snap.secrets.stripeKey) : 'rk_live_…'}" autocomplete="off"><button class="ghost-btn small gold" data-savekey="stripeKey">Save</button>${snap.secrets.stripeKey ? '<button class="ghost-btn small" data-clearkey="stripeKey">Remove</button>' : ''}</div></div>
+      <div class="muted tiny">Keys are stored only on this Mac (secrets.json in Missy's data folder). They're never shown again, backed up, exported or sent to GitHub.</div>
 
       <div class="section-title">Voice setup (push-to-talk)</div>
       <div id="micBox" class="muted tiny">Checking…</div>
@@ -495,9 +525,14 @@
       .map(([k, v]) => `<div>${k}</div><div>${esc(v)}</div>`).join('');
     const aiBox = $('#aiBox');
     if (aiBox) aiBox.innerHTML = ai.available && ai.model
-      ? `<span style="color:var(--green)">Online</span> — using <b>${esc(ai.model)}</b>. Installed: ${esc(ai.models.join(', '))}`
-      : `<div class="setup-step">${esc(ai.note)}<br><br>1. Install Ollama from <a href="#" data-url="https://ollama.com/download">ollama.com/download</a> (free).<br>2. In Terminal run <code>ollama pull ${hw.ramGB >= 16 ? 'llama3.1:8b' : 'llama3.2:3b'}</code><br>3. Missy picks it up automatically.</div>`;
+      ? `<span style="color:var(--green)">● Connected</span> — ${esc(ai.label)}, model <b>${esc(ai.model)}</b>. Missy understands normal conversation.${ai.lastError ? `<br><span style="color:var(--yellow)">Last problem: ${esc(ai.lastError)}</span>` : ''}`
+      : `<span style="color:var(--yellow)">● Not connected</span> — ${esc(ai.note)} Missy can only follow set commands until a brain is connected.`;
     const micBox = $('#micBox');
+    if (micBox && !api.nativeSpeech) {
+      micBox.innerHTML = canBrowserListen()
+        ? '<span style="color:var(--green)">● Ready</span> — Chrome is listening for you. Click the pink mic (or hold Space) and talk; she sends it when you pause.'
+        : '<span style="color:var(--yellow)">● This browser can\'t listen.</span> Open Missy in Google Chrome for voice.';
+    } else
     if (micBox) micBox.innerHTML = mic.whisper.ready
       ? `<span style="color:var(--green)">Ready</span> — ${esc(mic.whisper.bin)}<br>${esc(mic.whisper.model)}<br>Hold <b>Space</b> (or click the mic) to talk.`
       : `<div class="setup-step">Until this is set up, click the message bar and use Mac Dictation (🎤 key or Fn twice).<br><br>1. Install Homebrew from <a href="#" data-url="https://brew.sh">brew.sh</a> if you don't have it.<br>2. <code>brew install whisper-cpp</code><br>3. <code>mkdir -p ~/missy-models && curl -L -o ~/missy-models/ggml-base.en.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin</code><br><br>Found: ${mic.whisper.bin ? 'whisper ✓' : 'whisper ✗'} · ${mic.whisper.model ? 'model ✓' : 'model ✗'}</div>`;
@@ -511,7 +546,8 @@
 
   function updateBadges() {
     const a = $('#aiBadge'), m = $('#micBadge');
-    a.textContent = aiInfo.available && aiInfo.model ? `AI · ${aiInfo.model.split(':')[0]}` : 'AI · commands only';
+    a.textContent = aiInfo.available && aiInfo.model ? `AI · ${aiInfo.label || aiInfo.model.split(':')[0]}` : 'AI · not connected';
+    a.title = aiInfo.available ? `${aiInfo.label}: ${aiInfo.model}` : (aiInfo.note || 'No AI brain connected');
     a.className = 'chip ' + (aiInfo.available && aiInfo.model ? 'ok' : 'warn');
     const live = micInfo.whisper.ready || canBrowserListen();
     m.textContent = micInfo.whisper.ready ? 'MIC · whisper' : canBrowserListen() ? 'MIC · ready' : 'MIC · dictation';
@@ -520,7 +556,7 @@
 
   // ---------------------------------------------------------------- panel events (delegated)
   document.addEventListener('click', async e => {
-    const d = e.target.closest('[data-toggle],[data-approve],[data-archive],[data-start],[data-tfilter],[data-pfilter],[data-delevent],[data-proj],[data-ack],[data-contain],[data-resolve],[data-sim],[data-mkind],[data-promote],[data-karchive],[data-switch],[data-do],[data-url],[data-goto],[data-close],[data-testvoice],[data-portrait],[data-clearportrait],#briefBtn,#statusPill,.close');
+    const d = e.target.closest('[data-toggle],[data-approve],[data-archive],[data-start],[data-tfilter],[data-pfilter],[data-delevent],[data-proj],[data-ack],[data-contain],[data-resolve],[data-sim],[data-mkind],[data-promote],[data-karchive],[data-switch],[data-do],[data-url],[data-goto],[data-close],[data-testvoice],[data-portrait],[data-clearportrait],[data-savekey],[data-clearkey],[data-connswitch],[data-checkproj],#briefBtn,#statusPill,.close');
     if (!d) return;
     const ds = d.dataset;
     if (ds.toggle) { const t = snap.tasks.find(x => x.id === ds.toggle); await api.action('task:update', { id: t.id, patch: { status: t.status === 'done' ? 'todo' : 'done' } }); }
@@ -558,6 +594,24 @@
       bubble('missy', line, false, ds.testvoice); say(line, ds.testvoice); return;
     }
     else if (ds.portrait) { pickPortrait(ds.portrait); return; }
+    else if (ds.savekey) {
+      const input = $('#key-' + ds.savekey); const value = input && input.value.trim();
+      if (!value) { toast('Paste the key first.', 'yellow'); return; }
+      d.disabled = true; d.textContent = 'Checking…';
+      try {
+        const r = await api.action('secrets:set', { key: ds.savekey, value });
+        if (r.ai) { aiInfo = r.ai; updateBadges(); toast(r.ai.available ? `Brain connected: ${r.ai.label} (${r.ai.model}). Try talking to her!` : `Saved, but it didn't connect: ${r.ai.note}`, r.ai.available ? '' : 'yellow'); }
+        else toast('Saved on this Mac.');
+      } catch (err) { toast('Could not save: ' + err.message, 'yellow'); }
+    }
+    else if (ds.clearkey) { await api.action('secrets:set', { key: ds.clearkey, value: '' }); toast('Removed.'); }
+    else if (ds.connswitch) { const p = snap.projects.find(x => x.id === ds.connswitch); await api.action('project:connections', { id: p.id, connections: { stripe: !(p.connections && p.connections.stripe) } }); }
+    else if (ds.checkproj) {
+      d.disabled = true; d.textContent = 'Checking…'; busy = true; syncState();
+      try { const r = await api.action('project:check', { id: ds.checkproj }); bubble('missy', r.text, false, 'assistant'); say(r.text, 'assistant'); }
+      catch (err) { toast('Check failed: ' + err.message, 'yellow'); }
+      busy = false; syncState();
+    }
     else if (ds.clearportrait) { await api.action('team:update', { role: ds.clearportrait, patch: { portrait: '' } }); }
     else if (d.id === 'briefBtn') { runBriefing(); return; }
     else if (d.id === 'statusPill') { showLegend(); return; }
@@ -566,6 +620,13 @@
   });
 
   document.addEventListener('change', async e => {
+    if (e.target.dataset && e.target.dataset.conn) {
+      await api.action('project:connections', { id: e.target.dataset.conn, connections: { [e.target.dataset.key]: e.target.value.trim() } });
+      toast('Connection saved.'); await refresh(); return;
+    }
+    if (e.target.dataset && e.target.dataset.ai) {
+      aiInfo = await api.action('ai:settings', { [e.target.dataset.ai]: e.target.value }); updateBadges(); await refresh(); return;
+    }
     if (e.target.dataset && e.target.dataset.team) {
       let v = e.target.value; if (e.target.type === 'number') v = Number(v);
       await api.action('team:update', { role: e.target.dataset.team, patch: { [e.target.dataset.key]: v } });

@@ -7,6 +7,25 @@ const path = require('path');
 const { Missy } = require('../src/main/core/missy');
 const { parseWhen } = require('../src/main/core/when');
 
+// ---- fake internet so tests never depend on real sites ----
+const FAKE = {
+  'https://sitestyles.net': () => new Response('<html><head><title>Site Styles — Website Templates</title></head><body>Templates</body></html>', { status: 200, headers: { 'content-type': 'text/html' } }),
+  'https://api.github.com/repos/halliboocastleberry-hub/-site-styles': () => Response.json({ open_issues_count: 0, pushed_at: '2026-11-10T18:56:42Z' }),
+  'https://api.github.com/repos/halliboocastleberry-hub/-site-styles/commits?per_page=3': () => Response.json({ message: 'Git Repository is empty.' }, { status: 409 }),
+};
+let aiScript = null; // when set, plays the role of the cloud AI
+global.fetch = async (url, opts = {}) => {
+  url = String(url);
+  if (aiScript && url.endsWith('/models')) return Response.json({ data: [{ id: 'models/gemini-9.0-flash' }, { id: 'models/text-embedding-004' }] });
+  if (aiScript && url.endsWith('/chat/completions')) { const next = aiScript.shift(); return Response.json({ choices: [{ message: { content: typeof next === 'string' ? next : JSON.stringify(next) } }] }); }
+  if (url.startsWith('https://api.stripe.com/v1/balance')) return Response.json({ available: [{ amount: 9900, currency: 'usd' }] });
+  if (url.startsWith('https://api.stripe.com/v1/charges')) return Response.json({ data: [
+    { status: 'succeeded', paid: true, refunded: false, amount: 9900, currency: 'usd', livemode: true },
+    { status: 'failed', paid: false, refunded: false, amount: 9900, currency: 'usd', livemode: true }] });
+  if (FAKE[url]) return FAKE[url]();
+  const e = new Error('fetch failed'); e.cause = { code: 'ECONNREFUSED' }; throw e;
+};
+
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'missy-test-'));
 const events = [];
 const missy = new Missy(dir, (ch, p) => events.push([ch, p]));
@@ -74,8 +93,13 @@ async function test(name, fn) {
   });
 
   await test('check a project', async () => {
-    const r = await missy.handle('check site styles');
-    assert.match(r.text, /^SiteStyles: one open task/);
+    const r = await missy.handle('Missy, can you check on SiteStyles for me?');
+    assert.match(r.text, /^I just checked SiteStyles\. sitestyles\.net is up/);
+    assert.match(r.text, /no code in it yet/);
+    assert.match(r.text, /Stripe isn't connected/);
+    assert.match(r.text, /From my records: one open task/);
+    const r2 = await missy.handle("what's going on with site styles");
+    assert.match(r2.text, /^I just checked SiteStyles/);
   });
 
   await test('ideas vs decisions are stored separately', async () => {
@@ -93,7 +117,7 @@ async function test(name, fn) {
 
   await test('without local AI, open chat answers honestly', async () => {
     const r = await missy.handle('what do you think about my logo colors');
-    assert.match(r.text, /no local AI model is installed/);
+    assert.match(r.text, /AI brain isn't connected yet/);
   });
 
   await test('morning scan: real checks, honest about unconnected systems', async () => {
@@ -102,7 +126,8 @@ async function test(name, fn) {
     assert.match(r.text, /what's first today\?$/);
     assert.match(r.text, /aren't connected yet/);
     const rev = r.scan.sections.find(s => s.key === 'revenue');
-    assert.equal(rev.items[0].real, false);
+    assert.ok(rev.items.find(i => /SiteStyles — sitestyles\.net is up/.test(i.text) && i.real), 'live site check in scan');
+    assert.ok(rev.items.find(i => /Stripe isn't connected/.test(i.text) && !i.real), 'stripe honestly not checked');
     assert.ok(missy.store.meta().lastBackupAt, 'scan made a backup');
     assert.equal(missy.shouldAutoBrief(), false, 'only once per day');
   });
@@ -132,6 +157,41 @@ async function test(name, fn) {
     await missy.action('team:update', { role: 'manager', patch: { portrait: 'data:image/jpeg;base64,AAA' } });
     assert.equal(missy.store.settings().team.manager.portrait, 'data:image/jpeg;base64,AAA');
     assert.equal(missy.store.settings().team.assistant.name, 'Missy');
+  });
+
+  await test('stripe: refuses full secret keys, reads sales with a restricted key', async () => {
+    const { checkStripe } = require('../src/main/core/connectors');
+    assert.match((await checkStripe('sk_live_abc')).summary, /read-only restricted key/);
+    const ok = await checkStripe('rk_live_abc');
+    assert.match(ok.summary, /1 sale for \$99\.00, and 1 failed payment/);
+  });
+
+  await test('AI brain: understands, acts, and answers from live results', async () => {
+    aiScript = []; missy.secrets.set('geminiKey', 'test-key'); missy.ai.invalidate();
+    const st = await missy.ai.status(true);
+    assert.equal(st.provider, 'gemini'); assert.equal(st.model, 'gemini-9.0-flash');
+    aiScript = [
+      { say: 'Let me look.', actions: [{ type: 'check_business', project: 'site styles' }, { type: 'add_task', title: 'Set up Stripe checkout', project: 'SiteStyles', when: 'tomorrow at 3pm', priority: 'high' }] },
+      { say: 'SiteStyles is up and loading fast, but the GitHub repo is still empty. I added the Stripe task for tomorrow at 3.' },
+    ];
+    const r = await missy.handle('Hey Missy, how is SiteStyles doing? Also remind me to set up Stripe tomorrow at 3');
+    assert.match(r.text, /^SiteStyles is up/);
+    const t = missy.store.all('tasks').find(x => x.title === 'Set up Stripe checkout');
+    assert.ok(t && t.due && t.priority === 'high');
+    assert.ok(missy.store.get('projects', missy.store.all('projects').find(p => p.key === 'sitestyles').id).lastCheck);
+  });
+
+  await test('AI brain: a failed action overrides the model claiming success', async () => {
+    aiScript = [{ say: 'Done, I marked it complete!', actions: [{ type: 'complete_task', task: 'nonexistent unicorn task' }] }];
+    const r = await missy.handle('I finished the unicorn thing');
+    assert.match(r.text, /couldn't find an open task/);
+  });
+
+  await test('AI brain: if the AI breaks, basic commands still work', async () => {
+    aiScript = ['this is not json at all'];
+    const r = await missy.handle('add a task to call the printer friday');
+    assert.match(r.text, /AI brain had a problem/); assert.match(r.text, /Added "Call the printer"/);
+    missy.secrets.set('geminiKey', ''); missy.ai.invalidate(); aiScript = null;
   });
 
   await test('add a new business without code changes', async () => {

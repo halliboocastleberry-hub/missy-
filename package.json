@@ -1,14 +1,16 @@
 {
   "name": "missy-central",
   "productName": "Missy Central",
-  "version": "0.1.0",
-  "description": "Missy Central — private AI executive assistant and operations HQ for Halli Castleberry.",
+  "version": "0.3.0",
+  "description": "Missy Central \u2014 private AI executive assistant and operations HQ for Halli Castleberry.",
   "main": "src/main/main.js",
   "private": true,
   "author": "Halli S. Castleberry",
   "license": "UNLICENSED",
   "scripts": {
-    "start": "electron .",
+    "start": "node src/web/server.js --open",
+    "web": "node src/web/server.js",
+    "desktop": "electron .",
     "test": "node tests/core.test.js",
     "preview": "node tests/preview-server.js"
   },

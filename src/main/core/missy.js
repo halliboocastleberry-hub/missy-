@@ -11,6 +11,9 @@ const { runScan, overlaps } = require('./briefing');
 const { parseWhen } = require('./when');
 const { findProject, stripProject, slug } = require('./projects');
 const { hardwareReport } = require('./system');
+const { Secrets } = require('./secrets');
+const { runAgent } = require('./agent');
+const { checkProjectConnections } = require('./connectors');
 const { nowISO, startOfDay, endOfDay, fmtTime, fmtDay, spokenCount, dayKey } = require('./util');
 
 const APPROVAL_WORDS = /\b(publish|post live|pay|payment|purchase|buy|spend|refund|delete|remove all|deploy|production|launch|change (the )?password|permission|security)\b/i;
@@ -20,12 +23,25 @@ class Missy {
     this.emit = emit || (() => {});
     this.store = new Store(dataDir);
     this.alerts = new Alerts(this.store, (ch, p) => this._onAlertEvent(ch, p));
-    this.ai = new AI(this.store);
+    this.secrets = new Secrets(dataDir);
+    this.ai = new AI(this.store, this.secrets);
     this.voice = new Voice(this.store, this.emit);
     this.pendingAction = null;   // something Missy proposed and is waiting on a yes for
     this.pendingInterrupt = null; // red alert waiting for "Go ahead, Missy"
     this.history = [];            // short conversational memory for the AI
     this._ensureDemoFree();
+    this._ensureConnections();
+  }
+
+  /** Give SiteStyles its known live sources once (she can change them in Settings → Connections). */
+  _ensureConnections() {
+    if (this.store.meta().seededConnections) return;
+    const ss = this.store.all('projects').find(p => p.key === 'sitestyles');
+    if (ss && !ss.connections) {
+      ss.connections = { website: 'https://sitestyles.net', github: 'halliboocastleberry-hub/-site-styles', stripe: true };
+      ss.aliases = Array.from(new Set([...(ss.aliases || []), 'site styles', 'site style', 'sight styles']));
+    }
+    this.store.setMeta({ seededConnections: true });
   }
 
   _ensureDemoFree() {
@@ -33,8 +49,8 @@ class Missy {
     if (this.store.meta().seededStarterTasks) return;
     const p = key => (this.store.all('projects').find(x => x.key === key) || {}).id || null;
     const starter = [
-      { title: 'Install Ollama and a local model for Missy', projectId: null, priority: 'normal' },
-      { title: 'Install whisper for push-to-talk voice', projectId: null, priority: 'normal' },
+      { title: 'Add a free Gemini key so Missy understands conversation (Settings → Missy\'s AI brain)', projectId: null, priority: 'high' },
+      { title: 'Connect Stripe (read-only) so Missy can see SiteStyles sales', projectId: null, priority: 'normal' },
       { title: 'Write the Opulent Thoughts brand voice guide', projectId: p('opulent-thoughts'), priority: 'high' },
       { title: 'Plan first 20 Opulent Thoughts posts (batch 1 of 6)', projectId: p('opulent-thoughts'), priority: 'normal' },
     ];
@@ -75,6 +91,7 @@ class Missy {
       status: this.alerts.status(),
       meta: st.meta(),
       pendingAction: this.pendingAction ? { summary: this.pendingAction.summary } : null,
+      secrets: this.secrets.summary(),
     };
   }
 
@@ -104,6 +121,7 @@ class Missy {
     this._speaker = this.addressee(text);
     try {
       reply = await this._route(text);
+      if (this._aiFailNote) { reply.text = this._aiFailNote + reply.text; this._aiFailNote = ''; }
     } catch (err) {
       this.store.logAction('automation-failed', `Command failed: ${err.message}`);
       reply = this._reply(`Something went wrong on my side: ${err.message}. I've logged it.`);
@@ -125,7 +143,7 @@ class Missy {
   teamName(role) { const t = this.store.settings().team || {}; return (t[role] && t[role].name) || (role === 'manager' ? 'Miss Claudie' : 'Missy'); }
 
   async _route(original) {
-    const t = original.toLowerCase().replace(/^(hey |ok |okay )?((miss |ms\.? )?claud(ie|y|i)|missy( central)?|miss essentials)[,!.]?\s*/i, '').replace(/[?!.]+$/, '').trim();
+    const t = normalize(original);
     const s = this.store.settings();
 
     // Interruption protocol
@@ -140,6 +158,18 @@ class Missy {
     if (this.pendingAction && /^(no|nope|don't|never ?mind|skip it)\b/.test(t)) { this.pendingAction = null; return this._reply('Okay, I won\'t.'); }
     if (/^handle (that|it)$/.test(t)) return this._reply('There\'s nothing waiting on my end right now. Tell me what you\'d like handled and I\'ll take it from there.');
 
+    // With an AI brain, everything except instant commands goes to her — she understands normal speech
+    // and decides which actions to take. If the AI fails, the command engine below still runs.
+    const quick = /^(catch me up|morning briefing|briefing|run (a |the )?(system )?scan|help|what can you do|back ?up|backup|export)$/.test(t);
+    const ai = await this.ai.status();
+    if (ai.available && !quick) {
+      try { return await runAgent(this, original); }
+      catch (err) {
+        this.store.logAction('automation-failed', `AI: ${err.message}`);
+        this._aiFailNote = `(My AI brain had a problem: ${err.message}. I used my basic commands instead.) `;
+      }
+    }
+
     if (/\b(catch me up|morning briefing|briefing|run (a |the )?(system )?scan|system scan|status report)\b/.test(t)) {
       const r = await this.morningBriefing('manual');
       return this._reply(r.text, { panel: 'briefing' });
@@ -150,6 +180,9 @@ class Missy {
     let m;
     if ((m = t.match(/^(?:add|create|register) (?:a |new )?(?:business|project|brand) (?:called |named )?(.+)$/))) return this._addProject(m[1]);
     if ((m = t.match(/^(?:check|how(?:'s| is)|status (?:of|on)|update on) (.+)$/)) && findProject(this.store.all('projects'), m[1])) return this._checkProject(m[1]);
+    // Any sentence that names a business and asks about it ("what's going on with SiteStyles?")
+    if (/\b(check|status|how|going on|update|doing|look(ing)? at|pull up|report|numbers|sales|up and running|live)\b/.test(t) && findProject(this.store.all('projects'), t)
+        && !/^(add|create|schedule|book|remind|idea|decision|remember|note|mark|approve|start)\b/.test(t)) return this._checkProject(t);
 
     if ((m = t.match(/^(?:schedule|book|put|add)\b(.+?)(?:on|to)? ?(?:my |the )?(personal |business )?calendar\b(.*)$/)) ||
         (m = t.match(/^(?:schedule|book)\s+(.+)$/))) {
@@ -172,11 +205,9 @@ class Missy {
     if (/\b(hardware|my mac|system info|specs)\b/.test(t)) return this._hardware();
     if (/\b(what can you do|help|commands)\b/.test(t)) return this._help();
 
-    // Open conversation → local AI if present
-    const persona = this._speaker === 'manager' ? MANAGER_PERSONALITY : PERSONALITY;
-    const reply = await this.ai.chat(original, this._contextSummary(), this.history, persona).catch(() => null);
-    if (reply) return this._reply(reply);
-    return this._reply(`I can't hold open conversations yet because no local AI model is installed — but I can manage tasks, your calendar, projects and briefings. Try "Missy, what needs my attention?" or say "help".`);
+    // Nothing matched and no AI brain is available — say so honestly and specifically.
+    void PERSONALITY; void MANAGER_PERSONALITY;
+    return this._reply(`I didn't catch a command in "${original.slice(0, 80)}". My AI brain isn't connected yet, so for now I understand things like "check SiteStyles", "add a task to…", "schedule… tomorrow at 2", or "what's on my plate". Add a free Gemini key in Settings → Connections and I'll understand normal conversation.`, { panel: ai.available ? null : 'settings' });
   }
 
   // ------------------------------------------------------------------ intents
@@ -216,20 +247,59 @@ class Missy {
     return this._reply(`Bottom line, ${this.store.settings().addressAs}: ` + parts.join(' '), { panel: st.level === 'red' ? 'alerts' : 'tasks', speaker: 'manager' });
   }
 
-  _checkProject(phrase) {
+  async _checkProject(phrase) {
     const p = findProject(this.store.all('projects'), phrase);
+    const r = await this._checkProjectLive(p);
+    return this._reply(r.text, { panel: 'projects', focusProject: p.id });
+  }
+
+  /** Live checks + Missy's own records for one business. Returns spoken text and raw facts for the AI. */
+  async _checkProjectLive(p) {
+    this.emit('missy:state', 'processing');
+    const live = await checkProjectConnections(p, this.secrets);
+    const record = this._projectRecord(p);
+    const checkedAt = new Date().toISOString();
+    this.store.update('projects', p.id, { lastCheck: { at: checkedAt, results: live.map(({ source, target, ok, level, summary }) => ({ source, target, ok, level, summary })) } });
+    this.store.logAction('check', `Checked ${p.name}: ${live.map(x => `${x.source} ${x.ok ? 'ok' : 'problem'}`).join(', ') || 'no live connections'}`);
+    const liveText = live.length ? live.map(x => x.summary).join(' ') : `${p.name} has no live connections yet, so I can only see my own records for it.`;
+    const notConnected = [];
+    const c = p.connections || {};
+    if (!c.website) notConnected.push('its website');
+    if (!c.stripe) notConnected.push('payments');
+    const text = `I just checked ${p.name}. ${liveText} From my records: ${record}${notConnected.length && live.length ? ` Not connected yet: ${notConnected.join(' and ')}.` : ''}`;
+    const facts = [`Business: ${p.name} (checked ${new Date(checkedAt).toLocaleTimeString('en-US')})`,
+      ...live.map(x => `LIVE ${x.source}${x.target ? ' ' + x.target : ''}: ${x.summary}`),
+      live.length ? '' : 'No live connections configured for this business.',
+      `Missy's own records: ${record}`].filter(Boolean).join('\n');
+    return { text, facts, live };
+  }
+
+  _projectRecord(p) {
     const tasks = this.store.all('tasks').filter(t => t.projectId === p.id);
     const open = tasks.filter(t => t.status !== 'done' && t.status !== 'archived');
     const done = tasks.filter(t => t.status === 'done');
     const overdue = open.filter(t => t.due && new Date(t.due) < new Date());
     const ideas = this.store.all('knowledge').filter(k => k.projectId === p.id && k.kind === 'idea');
-    let text = `${p.name}: ${spokenCount(open.length, 'open task')}, ${done.length} done.`;
+    let text = `${spokenCount(open.length, 'open task')}, ${done.length} done.`;
     if (overdue.length) text += ` ${overdue.length} overdue, starting with ${overdue[0].title}.`;
     const next = open.find(t => t.priority === 'high') || open[0];
     if (next) text += ` Next up: ${next.title}.`;
     if (ideas.length) text += ` ${spokenCount(ideas.length, 'idea')} parked.`;
-    text += ' Its live store and site aren\'t connected to me yet.';
-    return this._reply(text, { panel: 'projects', focusProject: p.id });
+    return text;
+  }
+
+  /** Used by the AI brain: structured task creation (no sentence parsing of the title). */
+  _addTaskStructured({ title, project, when, priority }) {
+    const w = when ? parseWhen(String(when)) : { date: null, hasTime: false };
+    const clean = String(title).trim().replace(/[.]+$/, '');
+    const t = clean.charAt(0).toUpperCase() + clean.slice(1);
+    const needsApproval = APPROVAL_WORDS.test(t);
+    const task = this.store.insert('tasks', {
+      title: t, projectId: project ? project.id : null, status: 'todo', priority: ['high', 'low'].includes(priority) ? priority : 'normal',
+      due: w.date ? w.date.toISOString() : null, needsApproval, source: 'ai',
+    }, 'tsk');
+    this.store.logAction('task', `Added: ${t}`, { taskId: task.id });
+    return `Added "${t}"${project ? ` to ${project.name}` : ''}${task.due ? `, due ${fmtDay(task.due)}${w.hasTime ? ' at ' + fmtTime(task.due) : ''}` : ''}.${needsApproval ? ' It needs your approval before anything goes out.' : ''}`;
   }
 
   _addProject(name) {
@@ -404,7 +474,8 @@ class Missy {
   }
 
   // ------------------------------------------------------------------ direct UI actions
-  async action(name, args = {}) {
+  async action(name, args) {
+    args = args || {}; // the Chrome edition sends null for "no arguments"
     const st = this.store;
     let result;
     switch (name) {
@@ -441,7 +512,25 @@ class Missy {
         result = team[args.role]; break;
       }
       case 'hardware': return hardwareReport();
-      case 'ai:status': return this.ai.status();
+      case 'ai:status': return this.ai.status(Boolean(args.force));
+      case 'secrets:set': {
+        this.secrets.set(args.key, args.value || '');
+        this.ai.invalidate();
+        st.logAction('settings', `${args.value ? 'Saved' : 'Removed'} ${args.key}`);
+        result = { saved: this.secrets.summary() };
+        if (/gemini|groq/i.test(args.key) && args.value) result.ai = await this.ai.status(true);
+        break;
+      }
+      case 'ai:settings': st.updateSettings({ ai: { ...(st.settings().ai || {}), ...args } }); this.ai.invalidate(); result = await this.ai.status(true); break;
+      case 'project:connections': {
+        const p = st.get('projects', args.id);
+        if (!p) throw new Error('Unknown project');
+        p.connections = { ...(p.connections || {}), ...args.connections };
+        for (const k of Object.keys(p.connections)) if (!p.connections[k]) delete p.connections[k];
+        st.save(); st.logAction('settings', `Updated connections for ${p.name}`);
+        result = p; break;
+      }
+      case 'project:check': { const p = st.get('projects', args.id); result = await this._checkProjectLive(p); break; }
       case 'voice:status': return { whisper: this.voice.findWhisper(), voices: await this.voice.listVoices() };
       default: throw new Error(`Unknown action ${name}`);
     }
@@ -450,4 +539,17 @@ class Missy {
   }
 }
 
-module.exports = { Missy, APPROVAL_WORDS };
+/** Strip her name, politeness and filler so "Missy, can you please check on SiteStyles for me?" → "check on sitestyles". */
+function normalize(text) {
+  let t = String(text).toLowerCase().replace(/[’]/g, "'").trim();
+  t = t.replace(/^(hey|hi|ok|okay|yo|so|um|uh)[,!.]?\s+/, '');
+  t = t.replace(/^((miss |ms\.? )?claud(ie|y|i)|missy( central)?|miss essentials|miss thing)[,!.]?\s*/, '');
+  t = t.replace(/[?!.]+$/, '').trim();
+  for (let i = 0; i < 3; i++) {
+    t = t.replace(/^(can you|could you|would you|will you|can u|please|i want you to|i need you to|i'd like you to|go ahead and|real quick|quickly|let's|lets)\s+/, '');
+  }
+  t = t.replace(/\s+(for me|please|real quick|right now|thanks|thank you)$/g, '').trim();
+  return t;
+}
+
+module.exports = { Missy, APPROVAL_WORDS, normalize };

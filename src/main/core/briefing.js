@@ -6,6 +6,7 @@
  */
 const { nowISO, startOfDay, endOfDay, fmtTime, spokenCount, dayKey } = require('./util');
 const { Alerts } = require('./alerts');
+const { checkProjectConnections } = require('./connectors');
 
 async function runScan({ store, alerts, ai, voice, reason = 'manual' }) {
   const startedAt = nowISO();
@@ -58,8 +59,23 @@ async function runScan({ store, alerts, ai, voice, reason = 'manual' }) {
   sections.push({ key: 'health', title: 'System health', items: health });
 
   // ---------- 2. Revenue & customers ----------
+  // Live checks for every business that has connections (website, GitHub, Stripe).
+  const liveItems = [];
+  const connected = projects.filter(p => p.connections && Object.keys(p.connections).length && p.status !== 'archived');
+  const secrets = ai && ai.secrets;
+  const liveResults = await Promise.all(connected.map(p => checkProjectConnections(p, secrets).then(r => [p, r]).catch(() => [p, []])));
+  let stripeSeen = false;
+  for (const [p, results] of liveResults) {
+    for (const r of results) {
+      if (r.source === 'stripe' && r.ok) stripeSeen = true;
+      liveItems.push({ level: r.notConnected ? 'none' : r.level, text: `${p.name} — ${r.summary}`, real: !r.notConnected });
+      if (r.source === 'website' && r.level === 'red') alerts.raise({ level: 'yellow', title: `${p.name} website isn't loading`, detail: r.summary, source: 'scan' });
+      if (r.source === 'stripe' && r.failed7d) alerts.raise({ level: 'yellow', title: `${p.name}: ${r.failed7d} failed payment(s) this week`, detail: r.summary, source: 'scan' });
+    }
+  }
   sections.push({ key: 'revenue', title: 'Revenue & customers', items: [
-    { level: 'none', text: 'Orders, subscriptions, payments and customer requests: not connected yet — not checked.', real: false },
+    ...liveItems,
+    { level: 'none', text: `${stripeSeen ? 'Other businesses\' orders' : 'Orders, payments'}, customer inbox and social accounts: not connected yet — not checked.`, real: false },
     ...open.filter(t => /custom (website|site|design)|inquiry|customer/i.test(t.title))
       .map(t => ({ level: 'yellow', text: `Customer work pending: ${t.title} (${pName(t.projectId)})`, real: true })),
   ] });
@@ -114,7 +130,9 @@ async function runScan({ store, alerts, ai, voice, reason = 'manual' }) {
   }
   if (bits.length) parts.push('You have ' + joinList(bits) + '.');
   if (conflicts.length) parts.push(`Heads up: ${spokenCount(conflicts.length, 'calendar conflict')}.`);
-  parts.push('Your store and payment systems aren\'t connected yet, so I didn\'t check those.');
+  const siteLines = liveItems.filter(i => i.real).map(i => i.text.replace(/ — /, ': '));
+  if (siteLines.length) parts.push(`Live checks: ${siteLines.slice(0, 3).join(' ')}`);
+  parts.push(stripeSeen ? 'Anything not connected to me yet, I didn\'t check.' : 'Payments aren\'t connected yet, so I didn\'t check sales.');
   parts.push(`${s.addressAs}, what's first today?`);
   const spoken = parts.join(' ');
 

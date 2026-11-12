@@ -42,6 +42,8 @@ const DEFAULT_SETTINGS = {
     manager: { name: 'Miss Claudie', fullName: 'Miss Claudie', voice: 'Karen', rate: 192, pitch: 0.9, portrait: '' },
   },
   alertSound: true,
+  handsFree: true,            // after Missy asks a question, listen again automatically (Chrome edition)
+  ai: { provider: 'auto', model: '' }, // auto = Gemini key → Groq key → Ollama → commands only
   ollamaUrl: 'http://127.0.0.1:11434',
   ollamaModel: '',            // empty = auto-pick the first installed model
   whisperBinary: '',          // empty = auto-detect whisper-cli on PATH / Homebrew
