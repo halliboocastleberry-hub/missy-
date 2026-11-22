@@ -13,7 +13,7 @@ const { id, nowISO } = require('./util');
 const { PROJECTS, DEFAULT_SETTINGS } = require('./seed');
 
 const SCHEMA_VERSION = 1;
-const COLLECTIONS = ['projects', 'tasks', 'events', 'alerts', 'knowledge', 'log', 'scans'];
+const COLLECTIONS = ['projects', 'tasks', 'events', 'alerts', 'knowledge', 'log', 'scans', 'stickies'];
 
 class Store {
   constructor(dataDir) {
