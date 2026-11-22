@@ -162,7 +162,7 @@ class Missy {
     // Stickies are local, deterministic actions: they work even with AI unavailable.
     // A voice request must be explicit before Missy writes any sticky.
     const plain = original.replace(/^\s*(?:hey\s+)?missy[,! ]*\s*/i, '').trim();
-    const stickyCreate = plain.match(/^(?:pin|add|make|create)\s+(?:(?:a|new)\s+)?(?:sticky|sticky note)(?:\s+(?:saying|that says|for))?\s*[:,-]?\s*(.+)$/i);
+    const stickyCreate = plain.match(/^(?:pin|add|make|create)\s+(?:(?:a|new)\s+)?(?:sticky note|sticky)(?:\s+(?:saying|that says|for))?\s*[:,-]?\s*(.+)$/i);
     if (stickyCreate) {
       const note = stickyCreate[1].trim();
       if (!note) return this._reply('What should the sticky say?');
