@@ -313,7 +313,7 @@
   }
 
   function setTab(name) {
-    if (!['tasks', 'calendar', 'projects', 'alerts', 'memory', 'log', 'settings'].includes(name)) return;
+    if (!['tasks', 'calendar', 'projects', 'alerts', 'memory', 'stickies', 'log', 'settings'].includes(name)) return;
     tab = name;
     document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
     renderPanel();
@@ -324,11 +324,37 @@
     const el = $('#panel');
     const keep = document.activeElement && el.contains(document.activeElement) && document.activeElement.tagName === 'INPUT';
     if (keep) return; // don't wipe a form she's typing into
-    el.innerHTML = ({ tasks: panelTasks, calendar: panelCalendar, projects: panelProjects, alerts: panelAlerts, memory: panelMemory, log: panelLog, settings: panelSettings })[tab]();
+    el.innerHTML = ({ tasks: panelTasks, calendar: panelCalendar, projects: panelProjects, alerts: panelAlerts, memory: panelMemory, stickies: panelStickies, log: panelLog, settings: panelSettings })[tab]();
     if (tab === 'settings') hydrateSettings();
   }
 
   const projectOptions = (sel) => `<option value="">General</option>` + snap.projects.map(p => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${esc(p.name)}</option>`).join('');
+
+
+  function panelStickies() {
+    const colors = { gold: '#e8c15a', rose: '#ff92b6', mint: '#5addbb', blue: '#90bdff', lavender: '#c9a6ff' };
+    const list = (snap.stickies || []).filter(x => !x.archived).sort((a, b) => Number(b.pinned) - Number(a.pinned) || String(b.createdAt).localeCompare(String(a.createdAt)));
+    return `
+      <form id="stickyForm" class="grid2">
+        <input name="text" class="field full" maxlength="1000" placeholder="What's on your mind? Pin a note…" required aria-label="Sticky note text">
+        <select name="scope" class="field" aria-label="Sticky note area">
+          <option value="general">My day</option><option value="home">Home</option><option value="business">Business</option><option value="creator">Creator</option>
+        </select>
+        <select name="color" class="field" aria-label="Sticky note color">
+          <option value="gold">Champagne</option><option value="rose">Rose</option><option value="mint">Mint</option><option value="blue">Blue</option><option value="lavender">Lavender</option>
+        </select>
+        <button class="ghost-btn pink full">Pin sticky</button>
+      </form>
+      <div class="stack">${list.length ? list.map(note => `
+        <div class="item ${note.done ? 'done' : ''}" style="border-left:3px solid ${colors[note.color] || colors.gold}">
+          <button class="check ${note.done ? 'on' : ''}" data-sticky-done="${note.id}" aria-label="${note.done ? 'Mark unfinished' : 'Mark complete'}">${note.done ? '✓' : ''}</button>
+          <div class="body"><div class="title">${esc(note.text)}</div>
+            <div class="meta">${esc(note.scope || 'general')} · ${note.pinned ? 'Pinned' : 'Unpinned'}</div>
+          </div>
+          <button class="icon-btn" data-sticky-pin="${note.id}" aria-label="${note.pinned ? 'Unpin' : 'Pin'}" title="${note.pinned ? 'Unpin' : 'Pin'}">📌</button>
+          <button class="icon-btn" data-sticky-archive="${note.id}" aria-label="Archive note" title="Archive">✕</button>
+        </div>`).join('') : '<div class="empty">No stickies yet. Add a quick thought, or tell Missy “pin a sticky saying buy bread.”</div>'}</div>`;
+  }
 
   function panelTasks() {
     let list = snap.tasks.filter(t => t.status !== 'archived');
@@ -556,10 +582,21 @@
 
   // ---------------------------------------------------------------- panel events (delegated)
   document.addEventListener('click', async e => {
-    const d = e.target.closest('[data-toggle],[data-approve],[data-archive],[data-start],[data-tfilter],[data-pfilter],[data-delevent],[data-proj],[data-ack],[data-contain],[data-resolve],[data-sim],[data-mkind],[data-promote],[data-karchive],[data-switch],[data-do],[data-url],[data-goto],[data-close],[data-testvoice],[data-portrait],[data-clearportrait],[data-savekey],[data-clearkey],[data-connswitch],[data-checkproj],#briefBtn,#statusPill,.close');
+    const d = e.target.closest('[data-toggle],[data-approve],[data-archive],[data-start],[data-tfilter],[data-pfilter],[data-delevent],[data-proj],[data-ack],[data-contain],[data-resolve],[data-sim],[data-mkind],[data-promote],[data-karchive],[data-switch],[data-do],[data-url],[data-goto],[data-close],[data-testvoice],[data-portrait],[data-clearportrait],[data-savekey],[data-clearkey],[data-connswitch],[data-checkproj],[data-sticky-done],[data-sticky-pin],[data-sticky-archive],#briefBtn,#statusPill,.close');
     if (!d) return;
     const ds = d.dataset;
-    if (ds.toggle) { const t = snap.tasks.find(x => x.id === ds.toggle); await api.action('task:update', { id: t.id, patch: { status: t.status === 'done' ? 'todo' : 'done' } }); }
+    if (ds.stickyDone) {
+      const note = (snap.stickies || []).find(x => x.id === ds.stickyDone);
+      if (note) await api.action('sticky:update', { id: note.id, done: !note.done });
+    }
+    else if (ds.stickyPin) {
+      const note = (snap.stickies || []).find(x => x.id === ds.stickyPin);
+      if (note) await api.action('sticky:update', { id: note.id, pinned: !note.pinned });
+    }
+    else if (ds.stickyArchive) {
+      await api.action('sticky:archive', { id: ds.stickyArchive });
+    }
+    else if (ds.toggle) { const t = snap.tasks.find(x => x.id === ds.toggle); await api.action('task:update', { id: t.id, patch: { status: t.status === 'done' ? 'todo' : 'done' } }); }
     else if (ds.approve) { await api.action('task:approve', { id: ds.approve }); toast('Approved and logged.'); }
     else if (ds.archive) await api.action('task:delete', { id: ds.archive });
     else if (ds.start) await api.action('task:update', { id: ds.start, patch: { status: 'active' } });
@@ -645,6 +682,7 @@
     if (f.id === 'askForm') return;
     e.preventDefault();
     const data = Object.fromEntries(new FormData(f).entries());
+    if (f.id === 'stickyForm') await api.action('sticky:add', { text: data.text, scope: data.scope, color: data.color });
     if (f.id === 'taskForm') await api.action('task:add', { title: data.title, projectId: data.projectId || null, priority: data.priority, due: data.due ? new Date(data.due).toISOString() : null, source: 'manual' });
     if (f.id === 'eventForm') {
       const start = new Date(data.start), end = new Date(start.getTime() + Number(data.mins) * 60000);
