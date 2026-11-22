@@ -86,6 +86,7 @@ class Missy {
       events: st.all('events'),
       alerts: st.all('alerts'),
       knowledge: st.all('knowledge'),
+      stickies: st.all('stickies'),
       log: st.all('log').slice(-200).reverse(),
       lastScan: st.all('scans').slice(-1)[0] || null,
       status: this.alerts.status(),
@@ -157,6 +158,21 @@ class Missy {
     }
     if (this.pendingAction && /^(no|nope|don't|never ?mind|skip it)\b/.test(t)) { this.pendingAction = null; return this._reply('Okay, I won\'t.'); }
     if (/^handle (that|it)$/.test(t)) return this._reply('There\'s nothing waiting on my end right now. Tell me what you\'d like handled and I\'ll take it from there.');
+
+    // Stickies are local, deterministic actions: they work even with AI unavailable.
+    // A voice request must be explicit before Missy writes any sticky.
+    const plain = original.replace(/^\\s*(?:hey\\s+)?missy[,! ]*\\s*/i, '').trim();
+    const stickyCreate = plain.match(/^(?:pin|add|make|create)\\s+(?:(?:a|new)\\s+)?(?:sticky|sticky note)(?:\\s+(?:saying|that says|for))?\\s*[:,-]?\\s*(.+)$/i);
+    if (stickyCreate) {
+      const note = stickyCreate[1].trim();
+      if (!note) return this._reply('What should the sticky say?');
+      const result = await this.action('sticky:add', { text: note, scope: 'general' });
+      return this._reply(`Pinned your sticky: "${result.text}".`, { panel: 'stickies' });
+    }
+    if (/^(?:read|show|list|what are)\\s+(?:me\\s+)?(?:my\\s+)?(?:pinned\\s+)?(?:sticky notes|stickies)$/i.test(plain)) {
+      const notes = this.store.all('stickies').filter(x => !x.archived && x.pinned && !x.done);
+      return this._reply(notes.length ? 'Your stickies: ' + notes.map(x => x.text).join('; ') : 'You have no open pinned stickies.', { panel: 'stickies' });
+    }
 
     // With an AI brain, everything except instant commands goes to her — she understands normal speech
     // and decides which actions to take. If the AI fails, the command engine below still runs.
@@ -495,6 +511,35 @@ class Missy {
       }
       case 'project:add': return this._addProject(args.name);
       case 'project:update': result = st.update('projects', args.id, args.patch); break;
+      case 'sticky:add': {
+        const text = String(args.text || '').trim();
+        if (!text || text.length > 1000) throw new Error('Sticky text must be between 1 and 1000 characters.');
+        const scope = ['general', 'home', 'business', 'creator'].includes(args.scope) ? args.scope : 'general';
+        const color = ['gold', 'rose', 'mint', 'blue', 'lavender'].includes(args.color) ? args.color : 'gold';
+        result = st.insert('stickies', { text, scope, color, done: false, pinned: true, archived: false }, 'sty');
+        st.logAction('sticky', 'Pinned a sticky', { stickyId: result.id });
+        break;
+      }
+      case 'sticky:update': {
+        const current = st.get('stickies', args.id);
+        if (!current || current.archived) throw new Error('Sticky not found.');
+        const patch = {};
+        if (typeof args.done === 'boolean') patch.done = args.done;
+        if (typeof args.pinned === 'boolean') patch.pinned = args.pinned;
+        if (typeof args.text === 'string') {
+          patch.text = args.text.trim();
+          if (!patch.text || patch.text.length > 1000) throw new Error('Invalid sticky text.');
+        }
+        result = st.update('stickies', args.id, patch);
+        break;
+      }
+      case 'sticky:archive': {
+        const current = st.get('stickies', args.id);
+        if (!current) throw new Error('Sticky not found.');
+        result = st.update('stickies', args.id, { archived: true });
+        st.logAction('sticky', 'Archived a sticky', { stickyId: args.id });
+        break;
+      }
       case 'knowledge:add': result = st.insert('knowledge', { kind: args.kind || 'note', text: args.text, projectId: args.projectId || null }, 'kn'); break;
       case 'knowledge:update': result = st.update('knowledge', args.id, args.patch); break;
       case 'alert:ack': result = this.alerts.acknowledge(args.id); break;
