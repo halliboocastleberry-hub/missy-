@@ -161,15 +161,15 @@ class Missy {
 
     // Stickies are local, deterministic actions: they work even with AI unavailable.
     // A voice request must be explicit before Missy writes any sticky.
-    const plain = original.replace(/^\\s*(?:hey\\s+)?missy[,! ]*\\s*/i, '').trim();
-    const stickyCreate = plain.match(/^(?:pin|add|make|create)\\s+(?:(?:a|new)\\s+)?(?:sticky|sticky note)(?:\\s+(?:saying|that says|for))?\\s*[:,-]?\\s*(.+)$/i);
+    const plain = original.replace(/^\s*(?:hey\s+)?missy[,! ]*\s*/i, '').trim();
+    const stickyCreate = plain.match(/^(?:pin|add|make|create)\s+(?:(?:a|new)\s+)?(?:sticky|sticky note)(?:\s+(?:saying|that says|for))?\s*[:,-]?\s*(.+)$/i);
     if (stickyCreate) {
       const note = stickyCreate[1].trim();
       if (!note) return this._reply('What should the sticky say?');
       const result = await this.action('sticky:add', { text: note, scope: 'general' });
       return this._reply(`Pinned your sticky: "${result.text}".`, { panel: 'stickies' });
     }
-    if (/^(?:read|show|list|what are)\\s+(?:me\\s+)?(?:my\\s+)?(?:pinned\\s+)?(?:sticky notes|stickies)$/i.test(plain)) {
+    if (/^(?:read|show|list|what are)\s+(?:me\s+)?(?:my\s+)?(?:pinned\s+)?(?:sticky notes|stickies)$/i.test(plain)) {
       const notes = this.store.all('stickies').filter(x => !x.archived && x.pinned && !x.done);
       return this._reply(notes.length ? 'Your stickies: ' + notes.map(x => x.text).join('; ') : 'You have no open pinned stickies.', { panel: 'stickies' });
     }
