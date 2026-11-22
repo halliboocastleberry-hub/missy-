@@ -201,6 +201,21 @@ async function test(name, fn) {
     assert.match(r2.text, /to Castle Travel Co/);
   });
 
+  await test('Stickies work by voice without AI, persist, and archive without deleting history', async () => {
+    const r = await missy.handle('Missy, pin a sticky saying buy bread');
+    assert.match(r.text, /Pinned your sticky/);
+    const note = missy.snapshot().stickies.find(x => x.text === 'buy bread');
+    assert.ok(note && note.pinned && !note.done && note.scope === 'general');
+    const read = await missy.handle('Missy, read my stickies');
+    assert.match(read.text, /buy bread/);
+    const updated = await missy.action('sticky:update', { id: note.id, done: true });
+    assert.equal(updated.done, true);
+    const again = new Missy(dir);
+    assert.equal(again.snapshot().stickies.find(x => x.id === note.id).done, true);
+    await missy.action('sticky:archive', { id: note.id });
+    assert.ok(missy.snapshot().stickies.find(x => x.id === note.id).archived);
+  });
+
   await test('export writes portable files', () => {
     const r = missy.store.exportAll();
     assert.ok(fs.existsSync(path.join(r.dir, 'tasks.md')));
